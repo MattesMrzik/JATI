@@ -29,6 +29,21 @@ use crate::cli::{Cli, ConfigBuilder, GapHandling as Gap, SubstModelId as Model};
 
 type Result<T> = std::result::Result<T, Error>;
 
+macro_rules! run_model_optimisation {
+    ($macro:ident, $optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        match $cfg.model {
+            Model::JC69 => $macro!($optimiser, JC69, $cfg, $info, $rng),
+            Model::K80 => $macro!($optimiser, K80, $cfg, $info, $rng),
+            Model::HKY85 | Model::HKY => $macro!($optimiser, HKY, $cfg, $info, $rng),
+            Model::TN93 => $macro!($optimiser, TN93, $cfg, $info, $rng),
+            Model::GTR => $macro!($optimiser, GTR, $cfg, $info, $rng),
+            Model::WAG => $macro!($optimiser, WAG, $cfg, $info, $rng),
+            Model::HIVB => $macro!($optimiser, HIVB, $cfg, $info, $rng),
+            Model::BLOSUM => $macro!($optimiser, BLOSUM, $cfg, $info, $rng),
+        }
+    };
+}
+
 macro_rules! pip_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
@@ -45,6 +60,7 @@ macro_rules! tkf91_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
             TKF91CostBuilder::new(
+                // TODO: change this to use a slice when #166 is merged
                 $cfg.params[0],
                 $cfg.params[1],
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[2..].to_vec()),
@@ -138,52 +154,16 @@ fn main() -> Result<()> {
         }
     );
     let (cost, tree) = match cfg.gap_handling {
-        Gap::PIP => match cfg.model {
-            Model::JC69 => pip_optimisation!(SprOptimiser, JC69, cfg, info, &mut rng),
-            Model::K80 => pip_optimisation!(SprOptimiser, K80, cfg, info, &mut rng),
-            Model::HKY85 | Model::HKY => pip_optimisation!(SprOptimiser, HKY, cfg, info, &mut rng),
-            Model::TN93 => pip_optimisation!(SprOptimiser, TN93, cfg, info, &mut rng),
-            Model::GTR => pip_optimisation!(SprOptimiser, GTR, cfg, info, &mut rng),
-            Model::WAG => pip_optimisation!(SprOptimiser, WAG, cfg, info, &mut rng),
-            Model::HIVB => pip_optimisation!(SprOptimiser, HIVB, cfg, info, &mut rng),
-            Model::BLOSUM => pip_optimisation!(SprOptimiser, BLOSUM, cfg, info, &mut rng),
-        },
-        Gap::TKF91 => match cfg.model {
-            Model::JC69 => tkf91_optimisation!(NniOptimiser, JC69, cfg, info, &mut rng),
-            Model::K80 => tkf91_optimisation!(NniOptimiser, K80, cfg, info, &mut rng),
-            Model::HKY85 | Model::HKY => {
-                tkf91_optimisation!(NniOptimiser, HKY, cfg, info, &mut rng)
-            }
-            Model::TN93 => tkf91_optimisation!(NniOptimiser, TN93, cfg, info, &mut rng),
-            Model::GTR => tkf91_optimisation!(NniOptimiser, GTR, cfg, info, &mut rng),
-            Model::WAG => tkf91_optimisation!(NniOptimiser, WAG, cfg, info, &mut rng),
-            Model::HIVB => tkf91_optimisation!(NniOptimiser, HIVB, cfg, info, &mut rng),
-            Model::BLOSUM => tkf91_optimisation!(NniOptimiser, BLOSUM, cfg, info, &mut rng),
-        },
-        Gap::TKF92 => match cfg.model {
-            Model::JC69 => tkf92_optimisation!(NniOptimiser, JC69, cfg, info, &mut rng),
-            Model::K80 => tkf92_optimisation!(NniOptimiser, K80, cfg, info, &mut rng),
-            Model::HKY85 | Model::HKY => {
-                tkf92_optimisation!(NniOptimiser, HKY, cfg, info, &mut rng)
-            }
-            Model::TN93 => tkf92_optimisation!(NniOptimiser, TN93, cfg, info, &mut rng),
-            Model::GTR => tkf92_optimisation!(NniOptimiser, GTR, cfg, info, &mut rng),
-            Model::WAG => tkf92_optimisation!(NniOptimiser, WAG, cfg, info, &mut rng),
-            Model::HIVB => tkf92_optimisation!(NniOptimiser, HIVB, cfg, info, &mut rng),
-            Model::BLOSUM => tkf92_optimisation!(NniOptimiser, BLOSUM, cfg, info, &mut rng),
-        },
-        Gap::Missing => match cfg.model {
-            Model::JC69 => subst_optimisation!(SprOptimiser, JC69, cfg, info, &mut rng),
-            Model::K80 => subst_optimisation!(SprOptimiser, K80, cfg, info, &mut rng),
-            Model::HKY85 | Model::HKY => {
-                subst_optimisation!(SprOptimiser, HKY, cfg, info, &mut rng)
-            }
-            Model::TN93 => subst_optimisation!(SprOptimiser, TN93, cfg, info, &mut rng),
-            Model::GTR => subst_optimisation!(SprOptimiser, GTR, cfg, info, &mut rng),
-            Model::WAG => subst_optimisation!(SprOptimiser, WAG, cfg, info, &mut rng),
-            Model::HIVB => subst_optimisation!(SprOptimiser, HIVB, cfg, info, &mut rng),
-            Model::BLOSUM => subst_optimisation!(SprOptimiser, BLOSUM, cfg, info, &mut rng),
-        },
+        Gap::PIP => run_model_optimisation!(pip_optimisation, SprOptimiser, cfg, info, &mut rng),
+        Gap::TKF91 => {
+            run_model_optimisation!(tkf91_optimisation, NniOptimiser, cfg, info, &mut rng)
+        }
+        Gap::TKF92 => {
+            run_model_optimisation!(tkf92_optimisation, NniOptimiser, cfg, info, &mut rng)
+        }
+        Gap::Missing => {
+            run_model_optimisation!(subst_optimisation, SprOptimiser, cfg, info, &mut rng)
+        }
     };
 
     info!("Putting resulting tree in {}", cfg.out_tree.display());
