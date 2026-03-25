@@ -16,6 +16,8 @@ use crate::Result;
 #[allow(clippy::upper_case_acronyms)]
 pub(super) enum GapHandling {
     PIP,
+    TKF91,
+    TKF92,
     Missing,
 }
 
@@ -70,6 +72,8 @@ pub(super) struct Cli {
     /// r_tc r_ta r_tg r_ca r_cg r_ag for GTR (in this order).
     /// If not provided, defaults will be used.
     /// When using PIP the first two parameters are lambda and mu.
+    /// When using TKF91 the first two parameters are lambda and mu.
+    /// When using TKF92 the first three parameters are lambda, mu and r.
     #[arg(short = 'p', long, value_name = "MODEL_PARAMS", num_args = 0..)]
     pub(super) params: Vec<f64>,
 
@@ -183,6 +187,8 @@ impl Display for Config {
 
         let overmodel = match self.gap_handling {
             GapHandling::PIP => "PIP",
+            GapHandling::TKF91 => "TKF91",
+            GapHandling::TKF92 => "TKF92",
             GapHandling::Missing => "substitution",
         };
         writeln!(f, "Model setup: {} model with {} Q ", overmodel, self.model)?;

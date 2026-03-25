@@ -7,19 +7,21 @@ use anyhow::Error;
 use clap::Parser;
 use log::{debug, info};
 
-use phylo::alphabets::{dna_alphabet, protein_alphabet};
+use phylo::alphabets::{DNA_ALPHABET, PROTEIN_ALPHABET};
 use phylo::evolutionary_models::FrequencyOptimisation;
 use phylo::io::write_newick_to_file;
 use phylo::likelihood::{ModelSearchCost, TreeSearchCost};
 use phylo::optimisers::{
-    Compatible, ModelOptimiser, MoveOptimiser, SprOptimiser, StopCondition, TopologyOptimiser,
+    Compatible, ModelOptimiser, MoveOptimiser, NniOptimiser, SprOptimiser, StopCondition,
+    TopologyOptimiser,
 };
 use phylo::phylo_info::PhyloInfoBuilder;
 use phylo::pip_model::{PIPCostBuilder, PIPModel};
-use phylo::random::{DefaultGenerator, RandomSource};
+use phylo::random::DefaultGenerator;
 use phylo::substitution_models::{
     dna_models::*, protein_models::*, SubstModel, SubstitutionCostBuilder,
 };
+use phylo::tkf_model::{TKF91CostBuilder, TKF92CostBuilder};
 use phylo::tree::Tree;
 
 mod cli;
@@ -30,8 +32,46 @@ type Result<T> = std::result::Result<T, Error>;
 macro_rules! pip_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            PIPCostBuilder::new(PIPModel::<$model>::new(&$cfg.freqs, &$cfg.params), $info)
-                .build()?,
+            PIPCostBuilder::new(
+                PIPModel::<$model>::new(&$cfg.freqs, &$cfg.params),
+                $info.clone(),
+            )
+            .build()?,
+            $cfg.freq_opt,
+            $cfg.stop_condition,
+            $rng,
+        )?
+    };
+}
+
+macro_rules! tkf91_optimisation {
+    ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        run_optimisation::<$optimiser>(
+            TKF91CostBuilder::new(
+                $cfg.params[0],
+                $cfg.params[1],
+                SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[2..].to_vec()),
+                $info.clone(),
+            )
+            .build()?,
+            $cfg.freq_opt,
+            $cfg.stop_condition,
+            $rng,
+        )?
+    };
+}
+
+macro_rules! tkf92_optimisation {
+    ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        run_optimisation::<$optimiser>(
+            TKF92CostBuilder::new(
+                $cfg.params[0],
+                $cfg.params[1],
+                $cfg.params[2],
+                SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[3..].to_vec()),
+                $info.clone(),
+            )
+            .build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -44,7 +84,7 @@ macro_rules! subst_optimisation {
         run_optimisation::<$optimiser>(
             SubstitutionCostBuilder::new(
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params),
-                $info,
+                $info.clone(),
             )
             .build()?,
             $cfg.freq_opt,
@@ -60,18 +100,18 @@ fn main() -> Result<()> {
     info!("JATI run started.");
     info!("{}", cfg);
 
-    let rng = setup_rng(&cfg);
+    let _rng = setup_rng(&cfg);
 
     info!("Running on sequences from {}.", cfg.seq_file.display());
 
-    let alphabet = match cfg.model {
+    let alphabet: &'static phylo::alphabets::Alphabet = match cfg.model {
         Model::JC69 | Model::K80 | Model::HKY85 | Model::HKY | Model::TN93 | Model::GTR => {
             info!("Assuming DNA sequences");
-            dna_alphabet()
+            &DNA_ALPHABET
         }
         Model::WAG | Model::HIVB | Model::BLOSUM => {
             info!("Assuming protein sequences");
-            protein_alphabet()
+            &PROTEIN_ALPHABET
         }
     };
 
@@ -80,10 +120,12 @@ fn main() -> Result<()> {
         None => info!("No initial tree provided, building NJ tree from sequences."),
     }
 
+    let mut rng = setup_rng(&cfg);
+
     let info = PhyloInfoBuilder::new(cfg.seq_file)
         .tree_file(cfg.input_tree)
         .alphabet(Some(alphabet))
-        .build_w_rng(&rng)?;
+        .build_with_ancestors_w_rng(&mut rng)?;
 
     info!("Putting start tree in {}", cfg.start_tree.display());
 
@@ -93,29 +135,57 @@ fn main() -> Result<()> {
         "Gap handling: {}.",
         match cfg.gap_handling {
             Gap::PIP => "PIP",
+            Gap::TKF91 => "TKF91",
+            Gap::TKF92 => "TKF92",
             Gap::Missing => "as missing data",
         }
     );
     let (cost, tree) = match cfg.gap_handling {
         Gap::PIP => match cfg.model {
-            Model::JC69 => pip_optimisation!(SprOptimiser, JC69, cfg, info, &rng),
-            Model::K80 => pip_optimisation!(SprOptimiser, K80, cfg, info, &rng),
-            Model::HKY85 | Model::HKY => pip_optimisation!(SprOptimiser, HKY, cfg, info, &rng),
-            Model::TN93 => pip_optimisation!(SprOptimiser, TN93, cfg, info, &rng),
-            Model::GTR => pip_optimisation!(SprOptimiser, GTR, cfg, info, &rng),
-            Model::WAG => pip_optimisation!(SprOptimiser, WAG, cfg, info, &rng),
-            Model::HIVB => pip_optimisation!(SprOptimiser, HIVB, cfg, info, &rng),
-            Model::BLOSUM => pip_optimisation!(SprOptimiser, BLOSUM, cfg, info, &rng),
+            Model::JC69 => pip_optimisation!(SprOptimiser, JC69, cfg, info, &mut rng),
+            Model::K80 => pip_optimisation!(SprOptimiser, K80, cfg, info, &mut rng),
+            Model::HKY85 | Model::HKY => pip_optimisation!(SprOptimiser, HKY, cfg, info, &mut rng),
+            Model::TN93 => pip_optimisation!(SprOptimiser, TN93, cfg, info, &mut rng),
+            Model::GTR => pip_optimisation!(SprOptimiser, GTR, cfg, info, &mut rng),
+            Model::WAG => pip_optimisation!(SprOptimiser, WAG, cfg, info, &mut rng),
+            Model::HIVB => pip_optimisation!(SprOptimiser, HIVB, cfg, info, &mut rng),
+            Model::BLOSUM => pip_optimisation!(SprOptimiser, BLOSUM, cfg, info, &mut rng),
+        },
+        Gap::TKF91 => match cfg.model {
+            Model::JC69 => tkf91_optimisation!(NniOptimiser, JC69, cfg, info, &mut rng),
+            Model::K80 => tkf91_optimisation!(NniOptimiser, K80, cfg, info, &mut rng),
+            Model::HKY85 | Model::HKY => {
+                tkf91_optimisation!(NniOptimiser, HKY, cfg, info, &mut rng)
+            }
+            Model::TN93 => tkf91_optimisation!(NniOptimiser, TN93, cfg, info, &mut rng),
+            Model::GTR => tkf91_optimisation!(NniOptimiser, GTR, cfg, info, &mut rng),
+            Model::WAG => tkf91_optimisation!(NniOptimiser, WAG, cfg, info, &mut rng),
+            Model::HIVB => tkf91_optimisation!(NniOptimiser, HIVB, cfg, info, &mut rng),
+            Model::BLOSUM => tkf91_optimisation!(NniOptimiser, BLOSUM, cfg, info, &mut rng),
+        },
+        Gap::TKF92 => match cfg.model {
+            Model::JC69 => tkf92_optimisation!(NniOptimiser, JC69, cfg, info, &mut rng),
+            Model::K80 => tkf92_optimisation!(NniOptimiser, K80, cfg, info, &mut rng),
+            Model::HKY85 | Model::HKY => {
+                tkf92_optimisation!(NniOptimiser, HKY, cfg, info, &mut rng)
+            }
+            Model::TN93 => tkf92_optimisation!(NniOptimiser, TN93, cfg, info, &mut rng),
+            Model::GTR => tkf92_optimisation!(NniOptimiser, GTR, cfg, info, &mut rng),
+            Model::WAG => tkf92_optimisation!(NniOptimiser, WAG, cfg, info, &mut rng),
+            Model::HIVB => tkf92_optimisation!(NniOptimiser, HIVB, cfg, info, &mut rng),
+            Model::BLOSUM => tkf92_optimisation!(NniOptimiser, BLOSUM, cfg, info, &mut rng),
         },
         Gap::Missing => match cfg.model {
-            Model::JC69 => subst_optimisation!(SprOptimiser, JC69, cfg, info, &rng),
-            Model::K80 => subst_optimisation!(SprOptimiser, K80, cfg, info, &rng),
-            Model::HKY85 | Model::HKY => subst_optimisation!(SprOptimiser, HKY, cfg, info, &rng),
-            Model::TN93 => subst_optimisation!(SprOptimiser, TN93, cfg, info, &rng),
-            Model::GTR => subst_optimisation!(SprOptimiser, GTR, cfg, info, &rng),
-            Model::WAG => subst_optimisation!(SprOptimiser, WAG, cfg, info, &rng),
-            Model::HIVB => subst_optimisation!(SprOptimiser, HIVB, cfg, info, &rng),
-            Model::BLOSUM => subst_optimisation!(SprOptimiser, BLOSUM, cfg, info, &rng),
+            Model::JC69 => subst_optimisation!(SprOptimiser, JC69, cfg, info, &mut rng),
+            Model::K80 => subst_optimisation!(SprOptimiser, K80, cfg, info, &mut rng),
+            Model::HKY85 | Model::HKY => {
+                subst_optimisation!(SprOptimiser, HKY, cfg, info, &mut rng)
+            }
+            Model::TN93 => subst_optimisation!(SprOptimiser, TN93, cfg, info, &mut rng),
+            Model::GTR => subst_optimisation!(SprOptimiser, GTR, cfg, info, &mut rng),
+            Model::WAG => subst_optimisation!(SprOptimiser, WAG, cfg, info, &mut rng),
+            Model::HIVB => subst_optimisation!(SprOptimiser, HIVB, cfg, info, &mut rng),
+            Model::BLOSUM => subst_optimisation!(SprOptimiser, BLOSUM, cfg, info, &mut rng),
         },
     };
 
@@ -148,7 +218,7 @@ fn run_optimisation<MO>(
     cost: impl TreeSearchCost + ModelSearchCost + Display + Clone + Send + Compatible<MO>,
     freq_opt: FrequencyOptimisation,
     stop_condition: StopCondition,
-    rng: &impl RandomSource,
+    rng: &mut DefaultGenerator,
 ) -> Result<(f64, Tree)>
 where
     MO: MoveOptimiser + Default,
@@ -188,7 +258,6 @@ where
     }
 
     info!("Final cost after {} iterations: {}", iterations, curr_cost);
-    debug!("Final parameters: {:?}", cost.params());
     debug!("Final frequencies: {:?}", cost.freqs());
     debug!("Final tree: {}", cost.tree());
     Ok((curr_cost, cost.tree().clone()))
