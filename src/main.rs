@@ -7,7 +7,7 @@ use anyhow::Error;
 use clap::Parser;
 use log::{debug, info};
 
-use phylo::alphabets::{DNA_ALPHABET, PROTEIN_ALPHABET};
+use phylo::alphabets::{Alphabet, DNA_ALPHABET, PROTEIN_ALPHABET};
 use phylo::evolutionary_models::FrequencyOptimisation;
 use phylo::io::write_newick_to_file;
 use phylo::likelihood::{ModelSearchCost, TreeSearchCost};
@@ -32,11 +32,8 @@ type Result<T> = std::result::Result<T, Error>;
 macro_rules! pip_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            PIPCostBuilder::new(
-                PIPModel::<$model>::new(&$cfg.freqs, &$cfg.params),
-                $info.clone(),
-            )
-            .build()?,
+            PIPCostBuilder::new(PIPModel::<$model>::new(&$cfg.freqs, &$cfg.params), $info)
+                .build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -51,7 +48,7 @@ macro_rules! tkf91_optimisation {
                 $cfg.params[0],
                 $cfg.params[1],
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[2..].to_vec()),
-                $info.clone(),
+                $info,
             )
             .build()?,
             $cfg.freq_opt,
@@ -69,7 +66,7 @@ macro_rules! tkf92_optimisation {
                 $cfg.params[1],
                 $cfg.params[2],
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[3..].to_vec()),
-                $info.clone(),
+                $info,
             )
             .build()?,
             $cfg.freq_opt,
@@ -84,7 +81,7 @@ macro_rules! subst_optimisation {
         run_optimisation::<$optimiser>(
             SubstitutionCostBuilder::new(
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params),
-                $info.clone(),
+                $info,
             )
             .build()?,
             $cfg.freq_opt,
@@ -104,7 +101,7 @@ fn main() -> Result<()> {
 
     info!("Running on sequences from {}.", cfg.seq_file.display());
 
-    let alphabet: &'static phylo::alphabets::Alphabet = match cfg.model {
+    let alphabet: &'static Alphabet = match cfg.model {
         Model::JC69 | Model::K80 | Model::HKY85 | Model::HKY | Model::TN93 | Model::GTR => {
             info!("Assuming DNA sequences");
             &DNA_ALPHABET
