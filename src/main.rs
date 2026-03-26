@@ -135,15 +135,6 @@ fn main() -> Result<()> {
 
     let mut rng = setup_rng(&cfg);
 
-    let info = PhyloInfoBuilder::new(cfg.seq_file)
-        .tree_file(cfg.input_tree)
-        .alphabet(Some(alphabet))
-        .build_with_ancestors_w_rng(&mut rng)?;
-
-    info!("Putting start tree in {}", cfg.start_tree.display());
-
-    write_newick_to_file(std::slice::from_ref(&info.tree), cfg.start_tree)?;
-
     info!(
         "Gap handling: {}.",
         match cfg.gap_handling {
@@ -153,16 +144,41 @@ fn main() -> Result<()> {
             Gap::Missing => "as missing data",
         }
     );
+
     let (cost, tree) = match cfg.gap_handling {
-        Gap::PIP => run_model_optimisation!(pip_optimisation, SprOptimiser, cfg, info, &mut rng),
-        Gap::TKF91 => {
-            run_model_optimisation!(tkf91_optimisation, NniOptimiser, cfg, info, &mut rng)
+        Gap::TKF91 | Gap::TKF92 => {
+            let info = PhyloInfoBuilder::new(cfg.seq_file)
+                .tree_file(cfg.input_tree)
+                .alphabet(Some(alphabet))
+                .build_with_ancestors_w_rng(&mut rng)?;
+            info!("Putting start tree in {}", cfg.start_tree.display());
+            write_newick_to_file(std::slice::from_ref(&info.tree), cfg.start_tree)?;
+            match cfg.gap_handling {
+                Gap::TKF91 => {
+                    run_model_optimisation!(tkf91_optimisation, NniOptimiser, cfg, info, &mut rng)
+                }
+                Gap::TKF92 => {
+                    run_model_optimisation!(tkf92_optimisation, NniOptimiser, cfg, info, &mut rng)
+                }
+                _ => unreachable!(),
+            }
         }
-        Gap::TKF92 => {
-            run_model_optimisation!(tkf92_optimisation, NniOptimiser, cfg, info, &mut rng)
-        }
-        Gap::Missing => {
-            run_model_optimisation!(subst_optimisation, SprOptimiser, cfg, info, &mut rng)
+        Gap::PIP | Gap::Missing => {
+            let info = PhyloInfoBuilder::new(cfg.seq_file)
+                .tree_file(cfg.input_tree)
+                .alphabet(Some(alphabet))
+                .build_w_rng(&mut rng)?;
+            info!("Putting start tree in {}", cfg.start_tree.display());
+            write_newick_to_file(std::slice::from_ref(&info.tree), cfg.start_tree)?;
+            match cfg.gap_handling {
+                Gap::PIP => {
+                    run_model_optimisation!(pip_optimisation, SprOptimiser, cfg, info, &mut rng)
+                }
+                Gap::Missing => {
+                    run_model_optimisation!(subst_optimisation, SprOptimiser, cfg, info, &mut rng)
+                }
+                _ => unreachable!(),
+            }
         }
     };
 
