@@ -108,6 +108,16 @@ pub(super) struct Cli {
     /// PRNG seed that can be fixed for reproducible results
     #[arg(long = "seed", value_name = "PRNG_SEED")]
     pub(super) prng_seed: Option<u64>,
+
+    /// Log level for the run
+    #[arg(
+        short = 'l',
+        long,
+        value_name = "LOG_LEVEL",
+        default_value = "info",
+        ignore_case = true
+    )]
+    pub(super) log_level: LevelFilter,
 }
 
 pub struct ConfigBuilder {
@@ -123,6 +133,7 @@ pub struct ConfigBuilder {
     pub gap_handling: GapHandling,
     pub stop_condition: StopCondition,
     pub prng_seed: Option<u64>,
+    pub log_level: LevelFilter,
 }
 
 impl From<Cli> for ConfigBuilder {
@@ -138,6 +149,16 @@ impl From<Cli> for ConfigBuilder {
             StopCondition::epsilon(cli.epsilon)
         };
 
+        let mut params = cli.params;
+        // remove this when the params slice tkf init is done
+        if params.is_empty() {
+            if let GapHandling::TKF92 = cli.gap_handling {
+                if params.is_empty() {
+                    params = vec![0.1, 0.2, 0.5];
+                }
+            }
+        }
+
         ConfigBuilder {
             timestamp: Timestamp::now(),
             out_path: cli.out_folder,
@@ -145,12 +166,13 @@ impl From<Cli> for ConfigBuilder {
             seq_file: cli.seq_file,
             input_tree: cli.tree_file,
             model: cli.model,
-            params: cli.params,
+            params,
             freqs: cli.freqs,
             freq_opt: cli.freq_opt,
             gap_handling: cli.gap_handling,
             stop_condition,
             prng_seed: cli.prng_seed,
+            log_level: cli.log_level,
         }
     }
 }
@@ -171,6 +193,7 @@ pub struct Config {
     pub gap_handling: GapHandling,
     pub stop_condition: StopCondition,
     pub prng_seed: Option<u64>,
+    pub log_level: LevelFilter,
 }
 
 impl Display for Config {
@@ -197,8 +220,8 @@ impl Display for Config {
 
         writeln!(
             f,
-            "Optimisation setup: frequencies: {:#?}, stopping condition: {}",
-            self.freq_opt, self.stop_condition,
+            "Optimisation setup: frequencies: {:#?}, stopping condition: {}, log level: {}",
+            self.freq_opt, self.stop_condition, self.log_level,
         )
     }
 }
@@ -215,7 +238,7 @@ impl ConfigBuilder {
 
         Ftail::new()
             .datetime_format("%H:%M:%S")
-            .console(LevelFilter::Info)
+            .console(self.log_level)
             .single_file(
                 out_fldr.join(format!("{run_id}.log")).to_str().unwrap(),
                 true,
@@ -244,6 +267,7 @@ impl ConfigBuilder {
             gap_handling: self.gap_handling,
             stop_condition: self.stop_condition,
             prng_seed: self.prng_seed,
+            log_level: self.log_level,
         })
     }
 }
