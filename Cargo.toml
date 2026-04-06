@@ -40,7 +40,8 @@ debug = true
 clap = { version = "4.3.11", features = ["derive"] }
 log = "0.4.19"
 ftail = "0.2.0"
-phylo = { path = "/Users/mrzi/Documents/develop/phylo/phylo_for_jati/rust-phylo/phylo", features = ["par-regraft-manual"] }
+# phylo = { path = "/Users/mrzi/Documents/develop/phylo/phylo_for_jati/rust-phylo/phylo", features = ["par-regraft-manual"] }
+phylo = { path = "/Users/mrzi/Documents/develop/phylo/phylo_for_jati/rust-phylo/phylo" }
 anyhow = "1.0.86"
 ntimestamp = "1.0.0"
 

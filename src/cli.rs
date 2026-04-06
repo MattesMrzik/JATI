@@ -249,7 +249,7 @@ impl ConfigBuilder {
             .datetime_format("%H:%M:%S")
             .console(self.log_level)
             .single_file(
-                out_fldr.join(format!("{run_id}_log.txt")).to_str().unwrap(),
+                out_fldr.join(format!("{run_id}.log")).to_str().unwrap(),
                 true,
                 LevelFilter::Debug,
             )
