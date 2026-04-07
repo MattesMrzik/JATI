@@ -258,7 +258,7 @@ impl ConfigBuilder {
             .single_file(
                 out_fldr.join(format!("{run_id}.log")).to_str().unwrap(),
                 true,
-                LevelFilter::Debug,
+                LevelFilter::Info,
             )
             .init()?;
 
