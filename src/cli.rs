@@ -122,6 +122,10 @@ pub(super) struct Cli {
         ignore_case = true
     )]
     pub(super) log_level: LevelFilter,
+
+    /// Force NNI optimiser for topology search
+    #[arg(long, default_value_t = false)]
+    pub(super) force_nni: bool,
 }
 
 pub struct ConfigBuilder {
@@ -139,6 +143,7 @@ pub struct ConfigBuilder {
     pub prng_seed: Option<u64>,
     pub no_timestamp: bool,
     pub log_level: LevelFilter,
+    pub force_nni: bool,
 }
 
 impl From<Cli> for ConfigBuilder {
@@ -179,6 +184,7 @@ impl From<Cli> for ConfigBuilder {
             prng_seed: cli.prng_seed,
             no_timestamp: cli.no_timestamp,
             log_level: cli.log_level,
+            force_nni: cli.force_nni,
         }
     }
 }
@@ -201,6 +207,7 @@ pub struct Config {
     pub prng_seed: Option<u64>,
     pub no_timestamp: bool,
     pub log_level: LevelFilter,
+    pub force_nni: bool,
 }
 
 impl Display for Config {
@@ -278,6 +285,7 @@ impl ConfigBuilder {
             prng_seed: self.prng_seed,
             no_timestamp: self.no_timestamp,
             log_level: self.log_level,
+            force_nni: self.force_nni,
         })
     }
 }

@@ -172,10 +172,30 @@ fn main() -> Result<()> {
             write_newick_to_file(std::slice::from_ref(&info.tree), cfg.start_tree)?;
             match cfg.gap_handling {
                 Gap::PIP => {
-                    run_model_optimisation!(pip_optimisation, SprOptimiser, cfg, info, &mut rng)
+                    if cfg.force_nni {
+                        run_model_optimisation!(pip_optimisation, NniOptimiser, cfg, info, &mut rng)
+                    } else {
+                        run_model_optimisation!(pip_optimisation, SprOptimiser, cfg, info, &mut rng)
+                    }
                 }
                 Gap::Missing => {
-                    run_model_optimisation!(subst_optimisation, SprOptimiser, cfg, info, &mut rng)
+                    if cfg.force_nni {
+                        run_model_optimisation!(
+                            subst_optimisation,
+                            NniOptimiser,
+                            cfg,
+                            info,
+                            &mut rng
+                        )
+                    } else {
+                        run_model_optimisation!(
+                            subst_optimisation,
+                            SprOptimiser,
+                            cfg,
+                            info,
+                            &mut rng
+                        )
+                    }
                 }
                 _ => unreachable!(),
             }
