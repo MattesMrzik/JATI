@@ -21,7 +21,9 @@ use phylo::random::DefaultGenerator;
 use phylo::substitution_models::{
     dna_models::*, protein_models::*, SubstModel, SubstitutionCostBuilder,
 };
-use phylo::tkf_model::{TKF91CostBuilder, TKF92CostBuilder};
+use phylo::tkf_model::{
+    TKF91CostBuilder, TKF91IndelCostBuilder, TKF92CostBuilder, TKF92IndelCostBuilder,
+};
 use phylo::tree::Tree;
 
 mod cli;
@@ -40,7 +42,31 @@ macro_rules! run_model_optimisation {
             Model::WAG => $macro!($optimiser, WAG, $cfg, $info, $rng),
             Model::HIVB => $macro!($optimiser, HIVB, $cfg, $info, $rng),
             Model::BLOSUM => $macro!($optimiser, BLOSUM, $cfg, $info, $rng),
+            Model::NONE => unreachable!("Model::None is only valid for TKF91/TKF92"),
         }
+    };
+}
+
+macro_rules! tkf91_indel_optimisation {
+    ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        run_optimisation::<$optimiser>(
+            TKF91IndelCostBuilder::new($cfg.params[0], $cfg.params[1], $info).build()?,
+            $cfg.freq_opt,
+            $cfg.stop_condition,
+            $rng,
+        )?
+    };
+}
+
+macro_rules! tkf92_indel_optimisation {
+    ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        run_optimisation::<$optimiser>(
+            TKF92IndelCostBuilder::new($cfg.params[0], $cfg.params[1], $cfg.params[2], $info)
+                .build()?,
+            $cfg.freq_opt,
+            $cfg.stop_condition,
+            $rng,
+        )?
     };
 }
 
@@ -126,6 +152,10 @@ fn main() -> Result<()> {
             info!("Assuming protein sequences");
             &PROTEIN_ALPHABET
         }
+        Model::NONE => {
+            info!("<None> substitution model specified, assuming dummy");
+            &DNA_ALPHABET
+        }
     };
 
     match &cfg.input_tree {
@@ -155,15 +185,42 @@ fn main() -> Result<()> {
             write_newick_to_file(std::slice::from_ref(&info.tree), cfg.start_tree)?;
             match cfg.gap_handling {
                 Gap::TKF91 => {
-                    run_model_optimisation!(tkf91_optimisation, NniOptimiser, cfg, info, &mut rng)
+                    if matches!(cfg.model, Model::NONE) {
+                        println!("Running TKF91 indel optimisation with no substitution model");
+                        tkf91_indel_optimisation!(NniOptimiser, cfg, info, &mut rng)
+                    } else {
+                        run_model_optimisation!(
+                            tkf91_optimisation,
+                            NniOptimiser,
+                            cfg,
+                            info,
+                            &mut rng
+                        )
+                    }
                 }
                 Gap::TKF92 => {
-                    run_model_optimisation!(tkf92_optimisation, NniOptimiser, cfg, info, &mut rng)
+                    if matches!(cfg.model, Model::NONE) {
+                        println!("Running TKF92 indel optimisation with no substitution model");
+                        tkf92_indel_optimisation!(NniOptimiser, cfg, info, &mut rng)
+                    } else {
+                        run_model_optimisation!(
+                            tkf92_optimisation,
+                            NniOptimiser,
+                            cfg,
+                            info,
+                            &mut rng
+                        )
+                    }
                 }
                 _ => unreachable!(),
             }
         }
         Gap::PIP | Gap::Missing => {
+            if matches!(cfg.model, Model::NONE) {
+                return Err(Error::msg(
+                    "Model::None is only compatible with TKF91 and TKF92",
+                ));
+            }
             let info = PhyloInfoBuilder::new(cfg.seq_file)
                 .tree_file(cfg.input_tree)
                 .alphabet(Some(alphabet))

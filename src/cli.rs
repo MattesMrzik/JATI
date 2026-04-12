@@ -33,6 +33,7 @@ pub(super) enum SubstModelId {
     HKY85,
     TN93,
     GTR,
+    NONE,
 }
 
 impl Display for SubstModelId {
@@ -109,10 +110,6 @@ pub(super) struct Cli {
     #[arg(long = "seed", value_name = "PRNG_SEED")]
     pub(super) prng_seed: Option<u64>,
 
-    /// Do not add a timestamp to the output folder and files
-    #[arg(long, default_value_t = false)]
-    pub(super) no_timestamp: bool,
-
     /// Log level for the run
     #[arg(
         short = 'l',
@@ -141,7 +138,6 @@ pub struct ConfigBuilder {
     pub gap_handling: GapHandling,
     pub stop_condition: StopCondition,
     pub prng_seed: Option<u64>,
-    pub no_timestamp: bool,
     pub log_level: LevelFilter,
     pub force_nni: bool,
 }
@@ -182,7 +178,6 @@ impl From<Cli> for ConfigBuilder {
             gap_handling: cli.gap_handling,
             stop_condition,
             prng_seed: cli.prng_seed,
-            no_timestamp: cli.no_timestamp,
             log_level: cli.log_level,
             force_nni: cli.force_nni,
         }
@@ -205,7 +200,6 @@ pub struct Config {
     pub gap_handling: GapHandling,
     pub stop_condition: StopCondition,
     pub prng_seed: Option<u64>,
-    pub no_timestamp: bool,
     pub log_level: LevelFilter,
     pub force_nni: bool,
 }
@@ -234,20 +228,18 @@ impl Display for Config {
 
         writeln!(
             f,
-            "Optimisation setup: frequencies: {:#?}, stopping condition: {}, log level: {}, no timestamp: {}",
-            self.freq_opt, self.stop_condition, self.log_level, self.no_timestamp,
+            "Optimisation setup: frequencies: {:#?}, stopping condition: {}, log level: {}",
+            self.freq_opt, self.stop_condition, self.log_level,
         )
     }
 }
 
 impl ConfigBuilder {
     pub(crate) fn setup(self) -> Result<Config> {
-        let run_id = match (self.run_name, self.no_timestamp) {
-            (Some(name), false) => format!("{}_{}", name, self.timestamp.as_u64()),
-            (Some(name), true) => name,
-            (None, false) => format!("{}", self.timestamp.as_u64()),
-            (None, true) => "jati_run".to_string(),
-        };
+        let run_id = self.run_name.map_or_else(
+            || format!("{}", self.timestamp.as_u64()),
+            |name| format!("{}_{}", name, self.timestamp.as_u64()),
+        );
 
         let out_fldr = self.out_path.join(format!("{run_id}_out"));
         std::fs::create_dir_all(&out_fldr)?;
@@ -283,7 +275,6 @@ impl ConfigBuilder {
             gap_handling: self.gap_handling,
             stop_condition: self.stop_condition,
             prng_seed: self.prng_seed,
-            no_timestamp: self.no_timestamp,
             log_level: self.log_level,
             force_nni: self.force_nni,
         })
