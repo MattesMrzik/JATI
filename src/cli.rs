@@ -245,7 +245,7 @@ impl ConfigBuilder {
         std::fs::create_dir_all(&out_fldr)?;
 
         Ftail::new()
-            .datetime_format("%H:%M:%S")
+            .datetime_format("%D-%H:%M:%S")
             .console(self.log_level)
             .single_file(
                 out_fldr.join(format!("{run_id}.log")).to_str().unwrap(),
