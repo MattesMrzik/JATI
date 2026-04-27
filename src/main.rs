@@ -50,7 +50,7 @@ macro_rules! run_model_optimisation {
 macro_rules! tkf91_indel_optimisation {
     ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            TKF91IndelCostBuilder::new($cfg.params[0], $cfg.params[1], $info).build()?,
+            TKF91IndelCostBuilder::new(&$cfg.params, $info).build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -61,8 +61,7 @@ macro_rules! tkf91_indel_optimisation {
 macro_rules! tkf92_indel_optimisation {
     ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            TKF92IndelCostBuilder::new($cfg.params[0], $cfg.params[1], $cfg.params[2], $info)
-                .build()?,
+            TKF92IndelCostBuilder::new(&$cfg.params, $info).build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -86,9 +85,7 @@ macro_rules! tkf91_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
             TKF91CostBuilder::new(
-                // TODO: change this to use a slice when #166 is merged
-                $cfg.params[0],
-                $cfg.params[1],
+                &$cfg.params[..2],
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[2..].to_vec()),
                 $info,
             )
@@ -104,9 +101,7 @@ macro_rules! tkf92_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
             TKF92CostBuilder::new(
-                $cfg.params[0],
-                $cfg.params[1],
-                $cfg.params[2],
+                &$cfg.params[..3],
                 SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params[3..].to_vec()),
                 $info,
             )
