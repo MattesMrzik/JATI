@@ -53,6 +53,10 @@ pub(super) struct Cli {
     #[arg(short, long, value_name = "RUN_NAME")]
     pub(super) run_name: Option<String>,
 
+    /// Do not add a timestamp to the output folder and files
+    #[arg(long, default_value_t = false)]
+    pub no_timestamp: bool,
+
     /// Max iterations for the optimisation
     #[arg(short = 'x', long, value_name = "MAX_ITERATIONS")]
     pub(super) max_iterations: Option<usize>,
@@ -129,6 +133,7 @@ pub struct ConfigBuilder {
     pub timestamp: Timestamp,
     pub out_path: PathBuf,
     pub run_name: Option<String>,
+    pub no_timestamp: bool,
     pub seq_file: PathBuf,
     pub input_tree: Option<PathBuf>,
     pub model: SubstModelId,
@@ -169,6 +174,7 @@ impl From<Cli> for ConfigBuilder {
             timestamp: Timestamp::now(),
             out_path: cli.out_folder,
             run_name: cli.run_name,
+            no_timestamp: cli.no_timestamp,
             seq_file: cli.seq_file,
             input_tree: cli.tree_file,
             model: cli.model,
@@ -236,10 +242,12 @@ impl Display for Config {
 
 impl ConfigBuilder {
     pub(crate) fn setup(self) -> Result<Config> {
-        let run_id = self.run_name.map_or_else(
-            || format!("{}", self.timestamp.as_u64()),
-            |name| format!("{}_{}", name, self.timestamp.as_u64()),
-        );
+        let run_id = match (self.run_name, self.no_timestamp) {
+            (Some(name), false) => format!("{}_{}", name, self.timestamp.as_u64()),
+            (Some(name), true) => name,
+            (None, false) => format!("{}", self.timestamp.as_u64()),
+            (None, true) => "jati".to_string(),
+        };
 
         let out_fldr = self.out_path.join(format!("{run_id}_out"));
         std::fs::create_dir_all(&out_fldr)?;
