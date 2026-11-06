@@ -40,11 +40,9 @@ debug = true
 clap = { version = "4.3.11", features = ["derive"] }
 log = "0.4.19"
 ftail = "0.2.0"
-# phylo = { path = "/Users/mrzi/Documents/develop/phylo/phylo_for_jati/rust-phylo/phylo", features = ["par-regraft-manual"] }
-# phylo = { path = "/Users/mrzi/Documents/develop/phylo/phylo_for_jati/rust-phylo/phylo" }
-phylo = { git = "https://github.com/MattesMrzik/rust-phylo.git", branch = "phylo_for_jati" }
+phyne = { git = "https://github.com/acg-team/phyne.git", branch = "develop" }
 anyhow = "1.0.86"
 ntimestamp = "1.0.0"
 
 [features]
-parallel = ["phylo/par-regraft-manual"]
+parallel = ["phyne/par-regraft-manual"]

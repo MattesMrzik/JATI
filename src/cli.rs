@@ -2,15 +2,14 @@ use std::fmt::{self, Display};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
+use anyhow::Error;
 use clap::Parser;
 use ftail::Ftail;
 use log::{warn, LevelFilter};
 use ntimestamp::Timestamp;
 
-use phylo::evolutionary_models::FrequencyOptimisation;
-use phylo::optimisers::StopCondition;
-
-use crate::Result;
+use phyne::evolutionary_models::FrequencyOptimisation;
+use phyne::optimisers::StopCondition;
 
 #[derive(Clone, clap::ValueEnum, Copy, Debug)]
 #[allow(clippy::upper_case_acronyms)]
@@ -79,8 +78,8 @@ pub(super) struct Cli {
     /// When using PIP the first two parameters are lambda and mu.
     /// When using TKF91 the first two parameters are lambda and mu.
     /// When using TKF92 the first three parameters are lambda, mu and r.
-    #[arg(short = 'p', long, value_name = "MODEL_PARAMS", num_args = 0..)]
-    pub(super) params: Vec<f64>,
+    // #[arg(short = 'p', long, value_name = "MODEL_PARAMS", num_args = 0..)]
+    // pub(super) params: Vec<f64>,
 
     /// Sequence evolution model stationary frequencies
     /// pi_t pi_c pi_a pi_g (in this order)
@@ -137,7 +136,7 @@ pub struct ConfigBuilder {
     pub seq_file: PathBuf,
     pub input_tree: Option<PathBuf>,
     pub model: SubstModelId,
-    pub params: Vec<f64>,
+    // pub params: Vec<f64>,
     pub freqs: Vec<f64>,
     pub freq_opt: FrequencyOptimisation,
     pub gap_handling: GapHandling,
@@ -160,16 +159,6 @@ impl From<Cli> for ConfigBuilder {
             StopCondition::epsilon(cli.epsilon)
         };
 
-        let mut params = cli.params;
-        // remove this when the params slice tkf init is done
-        if params.is_empty() {
-            if let GapHandling::TKF92 = cli.gap_handling {
-                if params.is_empty() {
-                    params = vec![0.1, 0.2, 0.5];
-                }
-            }
-        }
-
         ConfigBuilder {
             timestamp: Timestamp::now(),
             out_path: cli.out_folder,
@@ -178,7 +167,6 @@ impl From<Cli> for ConfigBuilder {
             seq_file: cli.seq_file,
             input_tree: cli.tree_file,
             model: cli.model,
-            params,
             freqs: cli.freqs,
             freq_opt: cli.freq_opt,
             gap_handling: cli.gap_handling,
@@ -200,7 +188,7 @@ pub struct Config {
     pub seq_file: PathBuf,
     pub input_tree: Option<PathBuf>,
     pub model: SubstModelId,
-    pub params: Vec<f64>,
+    // pub params: Vec<f64>,
     pub freqs: Vec<f64>,
     pub freq_opt: FrequencyOptimisation,
     pub gap_handling: GapHandling,
@@ -229,7 +217,7 @@ impl Display for Config {
             GapHandling::Missing => "substitution",
         };
         writeln!(f, "Model setup: {} model with {} Q ", overmodel, self.model)?;
-        writeln!(f, "Model parameters: {:?}", self.params)?;
+        // writeln!(f, "Model parameters: {:?}", self.params)?;
         writeln!(f, "Model frequencies: {:?}", self.freqs)?;
 
         writeln!(
@@ -241,7 +229,7 @@ impl Display for Config {
 }
 
 impl ConfigBuilder {
-    pub(crate) fn setup(self) -> Result<Config> {
+    pub(crate) fn setup(self) -> Result<Config, Error> {
         let run_id = match (self.run_name, self.no_timestamp) {
             (Some(name), false) => format!("{}_{}", name, self.timestamp.as_u64()),
             (Some(name), true) => name,
@@ -277,7 +265,7 @@ impl ConfigBuilder {
             seq_file: self.seq_file,
             input_tree: self.input_tree,
             model: self.model,
-            params: self.params,
+            // params: self.params,
             freqs: self.freqs,
             freq_opt: self.freq_opt,
             gap_handling: self.gap_handling,

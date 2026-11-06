@@ -7,24 +7,22 @@ use anyhow::Error;
 use clap::Parser;
 use log::{debug, info};
 
-use phylo::alphabets::{Alphabet, DNA_ALPHABET, PROTEIN_ALPHABET};
-use phylo::evolutionary_models::FrequencyOptimisation;
-use phylo::io::write_newick_to_file;
-use phylo::likelihood::{ModelSearchCost, TreeSearchCost};
-use phylo::optimisers::{
+use phyne::alphabets::{Alphabet, DNA_ALPHABET, PROTEIN_ALPHABET};
+use phyne::evolutionary_models::FrequencyOptimisation;
+use phyne::io::write_newick_to_file;
+use phyne::likelihood::{ModelSearchCost, TreeSearchCost};
+use phyne::optimisers::{
     Compatible, ModelOptimiser, MoveOptimiser, NniOptimiser, SprOptimiser, StopCondition,
     TopologyOptimiser,
 };
-use phylo::phylo_info::PhyloInfoBuilder;
-use phylo::pip_model::{PIPCostBuilder, PIPModel};
-use phylo::random::DefaultGenerator;
-use phylo::substitution_models::{
+use phyne::phylo_info::PhyloInfoBuilder;
+use phyne::pip_model::{PIPCostBuilder, PIPModel};
+use phyne::random::DefaultGenerator;
+use phyne::substitution_models::{
     dna_models::*, protein_models::*, SubstModel, SubstitutionCostBuilder,
 };
-use phylo::tkf_model::{
-    TKF91CostBuilder, TKF91IndelCostBuilder, TKF92CostBuilder, TKF92IndelCostBuilder,
-};
-use phylo::tree::Tree;
+use phyne::tkf_model::{TKF91IndelModel, TKF92IndelModel, TKFCostBuilder, TKFIndelCostBuilder};
+use phyne::tree::Tree;
 
 mod cli;
 use crate::cli::{Cli, ConfigBuilder, GapHandling as Gap, SubstModelId as Model};
@@ -50,7 +48,7 @@ macro_rules! run_model_optimisation {
 macro_rules! tkf91_indel_optimisation {
     ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            TKF91IndelCostBuilder::new(&$cfg.params, $info).build()?,
+            TKFIndelCostBuilder::new(TKF91IndelModel::default(), $info).build(),
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -61,7 +59,7 @@ macro_rules! tkf91_indel_optimisation {
 macro_rules! tkf92_indel_optimisation {
     ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            TKF92IndelCostBuilder::new(&$cfg.params, $info).build()?,
+            TKFIndelCostBuilder::new(TKF92IndelModel::default(), $info).build(),
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -72,8 +70,7 @@ macro_rules! tkf92_indel_optimisation {
 macro_rules! pip_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            PIPCostBuilder::new(PIPModel::<$model>::new(&$cfg.freqs, &$cfg.params), $info)
-                .build()?,
+            PIPCostBuilder::new(PIPModel::<$model>::default(), $info).build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -83,12 +80,13 @@ macro_rules! pip_optimisation {
 
 macro_rules! tkf91_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {{
-        let split = 2.min($cfg.params.len());
-        let core = &$cfg.params[..split];
-        let rest = &$cfg.params[split..];
         run_optimisation::<$optimiser>(
-            TKF91CostBuilder::new(core, SubstModel::<$model>::new(&$cfg.freqs, rest), $info)
-                .build()?,
+            TKFCostBuilder::new(
+                SubstModel::<$model>::default(),
+                TKF91IndelModel::default(),
+                $info,
+            )
+            .build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -98,12 +96,13 @@ macro_rules! tkf91_optimisation {
 
 macro_rules! tkf92_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {{
-        let split = 3.min($cfg.params.len());
-        let core = &$cfg.params[..split];
-        let rest = &$cfg.params[split..];
         run_optimisation::<$optimiser>(
-            TKF92CostBuilder::new(core, SubstModel::<$model>::new(&$cfg.freqs, rest), $info)
-                .build()?,
+            TKFCostBuilder::new(
+                SubstModel::<$model>::default(),
+                TKF92IndelModel::default(),
+                $info,
+            )
+            .build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
@@ -114,11 +113,7 @@ macro_rules! tkf92_optimisation {
 macro_rules! subst_optimisation {
     ($optimiser:ty, $model:ty, $cfg:expr, $info:expr, $rng:expr) => {
         run_optimisation::<$optimiser>(
-            SubstitutionCostBuilder::new(
-                SubstModel::<$model>::new(&$cfg.freqs, &$cfg.params),
-                $info,
-            )
-            .build()?,
+            SubstitutionCostBuilder::new(SubstModel::<$model>::default(), $info).build()?,
             $cfg.freq_opt,
             $cfg.stop_condition,
             $rng,
