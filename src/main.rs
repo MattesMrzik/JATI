@@ -2,6 +2,8 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::Write;
 use std::result::Result::Ok;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use anyhow::Error;
 use clap::Parser;
@@ -29,6 +31,10 @@ use crate::cli::{Cli, ConfigBuilder, GapHandling as Gap, SubstModelId as Model};
 
 type Result<T> = std::result::Result<T, Error>;
 
+// Accumulated across all outer optimisation iterations.
+static MODEL_OPT_NANOS: AtomicU64 = AtomicU64::new(0);
+static TREE_OPT_NANOS: AtomicU64 = AtomicU64::new(0);
+
 macro_rules! run_model_optimisation {
     ($macro:ident, $optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
         match $cfg.model {
@@ -47,6 +53,9 @@ macro_rules! run_model_optimisation {
 
 macro_rules! tkf91_indel_optimisation {
     ($optimiser:ty, $cfg:expr, $info:expr, $rng:expr) => {
+        // let split = 2.min($cfg.params.len());
+        // let core = &$cfg.params[..split];
+        // let rest = &$cfg.params[split..];
         run_optimisation::<$optimiser>(
             TKFIndelCostBuilder::new(TKF91IndelModel::default(), $info).build(),
             $cfg.freq_opt,
@@ -122,6 +131,7 @@ macro_rules! subst_optimisation {
 }
 
 fn main() -> Result<()> {
+    let total_start = Instant::now();
     let cfg = ConfigBuilder::from(Cli::try_parse()?).setup()?;
 
     info!("JATI run started.");
@@ -254,6 +264,25 @@ fn main() -> Result<()> {
     let mut out_logl = File::create(cfg.out_logl)?;
     writeln!(out_logl, "{cost}")?;
 
+    let total = total_start.elapsed();
+    let model_opt = Duration::from_nanos(MODEL_OPT_NANOS.load(Ordering::Relaxed));
+    let tree_opt = Duration::from_nanos(TREE_OPT_NANOS.load(Ordering::Relaxed));
+    let other = total.saturating_sub(model_opt + tree_opt);
+    info!(
+        "Timing: total {:.3}s, param opti {:.3}s, tree opti {:.3}s, other {:.3}s",
+        total.as_secs_f64(),
+        model_opt.as_secs_f64(),
+        tree_opt.as_secs_f64(),
+        other.as_secs_f64()
+    );
+    println!(
+        "JATI_TIMING JATI_TOTAL_SEC={:.6} JATI_PARAM_OPT_SEC={:.6} JATI_TREE_OPT_SEC={:.6} JATI_OTHER_SEC={:.6}",
+        total.as_secs_f64(),
+        model_opt.as_secs_f64(),
+        tree_opt.as_secs_f64(),
+        other.as_secs_f64()
+    );
+
     Ok(())
 }
 
@@ -302,14 +331,19 @@ where
         prev_cost = curr_cost;
         let model_optimiser =
             ModelOptimiser::with_stop_condition(cost, freq_opt, intermediate_stop_condition);
+        let model_start = Instant::now();
+        let model_cost = model_optimiser.run()?.cost;
+        MODEL_OPT_NANOS.fetch_add(model_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        let tree_start = Instant::now();
         let o = TopologyOptimiser::with_stop_condition(
-            model_optimiser.run()?.cost,
+            model_cost,
             move_optimiser,
             rng,
             intermediate_stop_condition,
         )
         .run()
         .unwrap();
+        TREE_OPT_NANOS.fetch_add(tree_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
         curr_cost = o.final_cost;
         cost = o.cost;
         delta = curr_cost - prev_cost;
